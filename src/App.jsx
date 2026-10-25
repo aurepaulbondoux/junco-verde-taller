@@ -172,61 +172,96 @@ function useIsMobile() {
 
 // ── CATALOG EDITOR ────────────────────────────────────────────────────────────
 function CatalogEditor({ cfg, scfg }) {
+  // Guardamos como strings para permitir borrar el cero
   const initVals = {};
-  Object.values(CATALOG).forEach(p => { initVals[p.n] = { c: p.c, pv: p.p, lana: p.lana }; });
+  Object.values(CATALOG).forEach(p => {
+    initVals[p.n] = { c: String(p.c), pv: String(p.p), lana: String(p.lana) };
+  });
   const [vals, setVals] = useState(initVals);
   const [saved, setSaved] = useState(false);
 
-  const upd = (n, k, v) => setVals(prev => ({ ...prev, [n]: { ...prev[n], [k]: Number(v) } }));
+  const upd = (n, k, v) => setVals(prev => ({ ...prev, [n]: { ...prev[n], [k]: v } }));
 
   const saveGroup = (cat) => {
     CAT_DATA[cat].forEach(p => {
-      const v = vals[p.n] || { c: 0, pv: 0, lana: 0 };
-      CATALOG[p.n].c = v.c;
-      CATALOG[p.n].p = v.pv;
-      CATALOG[p.n].lana = v.lana;
+      const v = vals[p.n] || { c: "0", pv: "0", lana: "0" };
+      CATALOG[p.n].c   = Number(v.c)   || 0;
+      CATALOG[p.n].p   = Number(v.pv)  || 0;
+      CATALOG[p.n].lana= Number(v.lana)|| 0;
     });
+    // Guardar catálogo completo en Supabase
+    const snapshot = {};
+    Object.values(CATALOG).forEach(p => {
+      snapshot[p.n] = { c: p.c, p: p.p, lana: p.lana };
+    });
+    dbSet("catalogo", snapshot);
     scfg({ ...cfg, _t: Date.now() });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const numInput = (n, k, w) => (
-    <input type="number" min="0" value={vals[n] ? vals[n][k] : 0} onChange={e => upd(n, k, e.target.value)}
-      style={{width:w||90,padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:2,fontSize:12,background:T.bgCard,color:T.ink,fontFamily:"inherit"}}/>
+    <input
+      type="number" min="0"
+      value={vals[n] ? vals[n][k] : ""}
+      onChange={e => upd(n, k, e.target.value)}
+      onFocus={e => { if (e.target.value === "0") e.target.select(); }}
+      style={{
+        width: w || 90, padding: "5px 8px",
+        border: `1px solid ${T.border}`, borderRadius: 2,
+        fontSize: 12, background: T.bgCard, color: T.ink, fontFamily: "inherit"
+      }}
+    />
   );
 
   return (
     <div>
-      {saved && <div style={{background:T.okLt,border:`1px solid ${T.ok}`,borderRadius:4,padding:"10px 16px",marginBottom:16,fontSize:13,color:T.ok}}>✓ Precios guardados</div>}
+      {saved && (
+        <div style={{background:T.okLt,border:`1px solid ${T.ok}`,borderRadius:4,padding:"10px 16px",marginBottom:16,fontSize:13,color:T.ok}}>
+          ✓ Precios guardados en la nube
+        </div>
+      )}
       <div style={{background:T.warnLt,border:`1px solid ${T.warn}`,borderRadius:4,padding:"12px 16px",marginBottom:20,fontSize:13,color:T.warn}}>
-        ⚠ Completá costo y precio de cada prenda para que funcionen los cálculos de margen, análisis y planificación.
+        ⚠ Completá costo y precio de cada prenda. Hacé click en el campo para editar.
       </div>
       {Object.entries(CAT_DATA).map(([cat, items]) => (
         <Card key={cat} style={{marginBottom:12}}>
           <div style={{fontSize:11,color:T.inkMid,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:16}}>{cat}</div>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead><tr style={{background:T.bg}}><TH>Prenda</TH><TH>Costo ($)</TH><TH>Precio venta ($)</TH><TH>Lana (g)</TH><TH>Margen</TH></tr></thead>
+            <thead>
+              <tr style={{background:T.bg}}>
+                <TH>Prenda</TH><TH>Costo ($)</TH><TH>Precio venta ($)</TH><TH>Lana (g)</TH><TH>Margen</TH>
+              </tr>
+            </thead>
             <tbody>
               {items.map((p, i) => {
-                const v = vals[p.n] || { c: 0, pv: 0, lana: 0 };
-                const mg = v.pv > 0 ? Math.round((v.pv - v.c) / v.pv * 100) : null;
+                const v   = vals[p.n] || { c: "0", pv: "0", lana: "0" };
+                const c   = Number(v.c)  || 0;
+                const pv  = Number(v.pv) || 0;
+                const mg  = pv > 0 ? Math.round((pv - c) / pv * 100) : null;
                 const mgBg = mg === null ? T.bgMuted : mg > 50 ? T.okLt : mg > 30 ? T.warnLt : T.dangerLt;
-                const mgTx = mg === null ? T.inkLt : mg > 50 ? T.ok : mg > 30 ? T.warn : T.danger;
+                const mgTx = mg === null ? T.inkLt   : mg > 50 ? T.ok   : mg > 30 ? T.warn   : T.danger;
                 return (
-                  <tr key={p.n} style={{background:i%2===0?T.bgCard:T.bg}}>
-                    <TD style={{fontWeight:500,fontSize:12}}>{p.n}</TD>
-                    <TD>{numInput(p.n, "c", 90)}</TD>
-                    <TD>{numInput(p.n, "pv", 90)}</TD>
+                  <tr key={p.n} style={{background: i%2===0 ? T.bgCard : T.bg}}>
+                    <TD style={{fontWeight:500, fontSize:12}}>{p.n}</TD>
+                    <TD>{numInput(p.n, "c",   90)}</TD>
+                    <TD>{numInput(p.n, "pv",  90)}</TD>
                     <TD>{numInput(p.n, "lana", 80)}</TD>
-                    <TD>{mg !== null ? <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:mgBg,color:mgTx}}>{mg}%</span> : <span style={{fontSize:11,color:T.inkLt}}>—</span>}</TD>
+                    <TD>
+                      {mg !== null
+                        ? <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:mgBg,color:mgTx}}>{mg}%</span>
+                        : <span style={{fontSize:11,color:T.inkLt}}>—</span>
+                      }
+                    </TD>
                   </tr>
                 );
               })}
             </tbody>
           </table>
           <div style={{marginTop:10,textAlign:"right"}}>
-            <Btn small variant="primary" onClick={() => saveGroup(cat)}>Guardar {cat}</Btn>
+            <Btn small variant="primary" onClick={() => saveGroup(cat)}>
+              Guardar {cat}
+            </Btn>
           </div>
         </Card>
       ))}
