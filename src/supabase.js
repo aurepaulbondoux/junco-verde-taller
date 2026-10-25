@@ -9,7 +9,7 @@ export async function dbGet(tabla) {
   try {
     const { data, error } = await supabase
       .from(tabla)
-      .select('data')
+      .select('id, data')
       .order('id', { ascending: false })
       .limit(1)
     if (error || !data || data.length === 0) return null
@@ -22,24 +22,27 @@ export async function dbGet(tabla) {
 
 export async function dbSet(tabla, valor) {
   try {
-    // Primero leemos los IDs existentes
+    // Buscar si ya existe una fila
     const { data: filas } = await supabase
       .from(tabla)
       .select('id')
+      .order('id', { ascending: true })
+      .limit(1)
 
-    // Borramos fila por fila si hay datos
     if (filas && filas.length > 0) {
-      for (const fila of filas) {
-        await supabase.from(tabla).delete().eq('id', fila.id)
-      }
+      // Actualizar la fila existente
+      const { error } = await supabase
+        .from(tabla)
+        .update({ data: valor })
+        .eq('id', filas[0].id)
+      if (error) console.error(`dbSet update error en ${tabla}:`, error)
+    } else {
+      // Insertar nueva fila
+      const { error } = await supabase
+        .from(tabla)
+        .insert({ data: valor })
+      if (error) console.error(`dbSet insert error en ${tabla}:`, error)
     }
-
-    // Insertamos el nuevo estado
-    const { error } = await supabase
-      .from(tabla)
-      .insert({ data: valor })
-
-    if (error) console.error(`dbSet error en ${tabla}:`, error)
   } catch (e) {
     console.error(`dbSet exception en ${tabla}:`, e)
   }
