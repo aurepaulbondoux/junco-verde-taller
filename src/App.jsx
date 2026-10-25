@@ -386,38 +386,46 @@ export default function App() {
   const cfgDef = { alertaEntregaDias:5, stockMinimoDefault:2, margenMinimoAlerta:40, diasAlertaPago:7, taller:{nombre:"Junco Verde",email:"hola@juncoverde.com.uy",tel:"+598 99 452 591",ciudad:"Punta del Este, Uruguay"}, tiemposProd:{} };
   const [cfg, setCfg] = useState(cfgDef);
 
-  // ── CARGA INICIAL DESDE SUPABASE ──
-  useEffect(() => {
-    async function cargarDatos() {
-      setLoading(true);
-      const [p, s, l, a, c, co, pr, pa, tl, cf] = await Promise.all([
-        dbGet("pedidos"), dbGet("stock_prendas"), dbGet("lanas"),
-        dbGet("artesanas"), dbGet("clientes"), dbGet("comprobantes"),
-        dbGet("proveedores"), dbGet("pagos_artesanas"), dbGet("talles"),
-        dbGet("configuracion"),
-      ]);
-      if (p) setPedidos(p);
-      if (s) setStockP(s);
-      if (l) setLanas(l);
-      if (a) setArtesanas(a);
-      if (c) setClientes(c);
-      if (co) setComps(co);
-      if (pr) setProvs(pr);
-      if (pa) setPagosArt(pa);
-      if (tl) setTalles(tl);
-      if (cf) setCfg(cf);
+// ── CARGA INICIAL DESDE SUPABASE ──
+const cargado = useRef(false);
 
-      // Cargar catálogo
-      const cat = await dbGet("catalogo");
-      if (cat) {
-        Object.entries(cat).forEach(([n, v]) => {
-          if (CATALOG[n]) { CATALOG[n].c = v.c; CATALOG[n].p = v.p; CATALOG[n].lana = v.lana; }
-        });
-      }
-      setLoading(false);
+useEffect(() => {
+  if (cargado.current) return;
+  cargado.current = true;
+
+  async function cargarDatos() {
+    setLoading(true);
+    const [p, s, l, a, c, co, pr, pa, tl, cf] = await Promise.all([
+      dbGet("pedidos"), dbGet("stock_prendas"), dbGet("lanas"),
+      dbGet("artesanas"), dbGet("clientes"), dbGet("comprobantes"),
+      dbGet("proveedores"), dbGet("pagos_artesanas"), dbGet("talles"),
+      dbGet("configuracion"),
+    ]);
+    if (p)  setPedidos(p);
+    if (s)  setStockP(s);
+    if (l)  setLanas(l);
+    if (a)  setArtesanas(a);
+    if (c)  setClientes(c);
+    if (co) setComps(co);
+    if (pr) setProvs(pr);
+    if (pa) setPagosArt(pa);
+    if (tl) setTalles(tl);
+    if (cf) setCfg(cf);
+
+    const cat = await dbGet("catalogo");
+    if (cat) {
+      Object.entries(cat).forEach(([n, v]) => {
+        if (CATALOG[n]) {
+          CATALOG[n].c    = v.c;
+          CATALOG[n].p    = v.p;
+          CATALOG[n].lana = v.lana;
+        }
+      });
     }
-    cargarDatos();
-  }, []);
+    setLoading(false);
+  }
+  cargarDatos();
+}, []);
 
   // ── GUARDADO AUTOMÁTICO EN SUPABASE ──
   const sp  = useCallback(v => { setPedidos(v);   dbSet("pedidos", v); }, []);
