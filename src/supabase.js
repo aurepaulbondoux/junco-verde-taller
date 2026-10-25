@@ -5,16 +5,42 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-// Helpers genéricos para leer y escribir tablas
 export async function dbGet(tabla) {
-  const { data, error } = await supabase.from(tabla).select('data').order('id').limit(1)
-  if (error || !data || data.length === 0) return null
-  return data[0].data
+  try {
+    const { data, error } = await supabase
+      .from(tabla)
+      .select('data')
+      .order('id', { ascending: false })
+      .limit(1)
+    if (error || !data || data.length === 0) return null
+    return data[0].data
+  } catch (e) {
+    console.error(`dbGet error en ${tabla}:`, e)
+    return null
+  }
 }
 
 export async function dbSet(tabla, valor) {
-  // Borra todo y guarda el nuevo estado
-  await supabase.from(tabla).delete().neq('id', 0)
-  const { error } = await supabase.from(tabla).insert({ data: valor })
-  if (error) console.error(`Error guardando ${tabla}:`, error)
+  try {
+    // Primero leemos los IDs existentes
+    const { data: filas } = await supabase
+      .from(tabla)
+      .select('id')
+
+    // Borramos fila por fila si hay datos
+    if (filas && filas.length > 0) {
+      for (const fila of filas) {
+        await supabase.from(tabla).delete().eq('id', fila.id)
+      }
+    }
+
+    // Insertamos el nuevo estado
+    const { error } = await supabase
+      .from(tabla)
+      .insert({ data: valor })
+
+    if (error) console.error(`dbSet error en ${tabla}:`, error)
+  } catch (e) {
+    console.error(`dbSet exception en ${tabla}:`, e)
+  }
 }
