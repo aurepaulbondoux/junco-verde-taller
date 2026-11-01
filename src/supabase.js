@@ -9,6 +9,43 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 
 export const supabase = createClient(SUPABASE_URL || 'http://localhost', SUPABASE_ANON_KEY || 'missing')
 
+// ───────── LOGIN ─────────
+export async function getSession() {
+  try {
+    const { data } = await supabase.auth.getSession()
+    return data.session
+  } catch (e) {
+    console.error('getSession error:', e)
+    return null
+  }
+}
+
+export function onAuth(callback) {
+  const { data } = supabase.auth.onAuthStateChange((_evento, session) => {
+    callback(session)
+  })
+  return () => data.subscription.unsubscribe()
+}
+
+// Devuelve null si salió bien, o el texto del error
+export async function signIn(email, password) {
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    return error ? error.message : null
+  } catch (e) {
+    return 'Error de conexión'
+  }
+}
+
+export async function signOut() {
+  try {
+    await supabase.auth.signOut()
+  } catch (e) {
+    console.error('signOut error:', e)
+  }
+}
+
+// ───────── DATOS ─────────
 // Devuelve: el valor guardado, null si la tabla está vacía, undefined si hubo error
 export async function dbGet(tabla) {
   try {
@@ -51,7 +88,6 @@ async function guardar(tabla, valor) {
         console.error('dbSet update error en ' + tabla + ':', error)
         return false
       }
-      // Limpia filas duplicadas si las hubiera
       for (let i = 1; i < filas.length; i++) {
         await supabase.from(tabla).delete().eq('id', filas[i].id)
       }
