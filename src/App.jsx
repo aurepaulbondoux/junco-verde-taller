@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, createContext, useContext } from "react";
-import { dbGet, dbSet } from "./supabase.js";
+import { dbGet, dbSet, getSession, onAuth, signIn, signOut } from "./supabase.js";
 
 // ═══════════════════════ CONSTANTES ═══════════════════════
 const T = {bg:"#faf7f2",bgCard:"#fff",bgMuted:"#f0ebe2",bgDeep:"#e6dfd4",ink:"#1e1c18",inkMid:"#5a5750",inkLt:"#9a9690",border:"#ddd8cf",borderLt:"#eae5dc",green:"#3d5a3e",greenLt:"#e8f0e8",tierra:"#8b6f47",danger:"#b03a2e",dangerLt:"#fdf0ee",warn:"#916a00",warnLt:"#fef8e6",ok:"#2d6a4f",okLt:"#e8f5ee",info:"#2c5f8a",infoLt:"#eaf2f8",violet:"#5b3f7a",violetLt:"#f2eef8"};
@@ -11,6 +11,7 @@ const TIPO_COLOR = {"Factura compra":{bg:"#fef3c7",tx:"#92400e"},"Factura venta"
 const IVA_RATES = [0,10,22];
 const TECNICAS = ["Tejido a dos agujas","Tejido circular","Crochet","Telar","Bordado","Macramé","Fieltro","Teñido natural","Tintura","Terminaciones a mano"];
 
+// Catálogo base (las prendas originales). Las prendas nuevas se guardan en Supabase.
 const CAT_DATA = {
   "Ruanas / Ponchos / Chales":[
     {n:"Ruana Junco"},{n:"Ruana Aura"},{n:"Ruana Aura Chica"},{n:"Ruana Juana"},{n:"Ruana Zira"},
@@ -42,17 +43,17 @@ const CAT_DATA = {
     {n:"Hilado Grueso"},{n:"Hilado Flame"},{n:"Hilado Zig Zag"}
   ]
 };
-const CAT_BASE = {};
+const BASE_CAT = {};
 Object.entries(CAT_DATA).forEach(([cat, items]) => {
-  items.forEach(p => { CAT_BASE[p.n] = {n: p.n, cat: cat}; });
+  items.forEach(p => { BASE_CAT[p.n] = cat; });
 });
-const NOMBRES = Object.keys(CAT_BASE);
 
-const tallesParaPrenda = nombre => {
-  const cat = CAT_BASE[nombre] ? CAT_BASE[nombre].cat : "";
-  if (cat.includes("Kids")) return ["1-2 m","3-4 m","5-6 m","7-8 m","9-11 m","1-2 años","3-4 años","5-6 años","7-8 años","10 años","12 años"];
-  if (cat.includes("Sombreros") || cat.includes("Chales") || nombre.startsWith("Ruana") || nombre.startsWith("Manti")) return ["Talle único"];
-  if (cat.includes("Hilados")) return ["100g"];
+const tallesParaPrenda = (nombre, cat) => {
+  const c = cat || "";
+  const n = nombre || "";
+  if (c.includes("Kids")) return ["1-2 m","3-4 m","5-6 m","7-8 m","9-11 m","1-2 años","3-4 años","5-6 años","7-8 años","10 años","12 años"];
+  if (c.includes("Sombreros") || c.includes("Chales") || n.startsWith("Ruana") || n.startsWith("Manti")) return ["Talle único"];
+  if (c.includes("Hilados")) return ["100g"];
   return ["XS","S","M","L","XL","XXL","Talle único"];
 };
 
@@ -218,6 +219,14 @@ function TotRow({ sub, ivaT, total }) {
     </div>
   );
 }
+function Splash({ texto }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:T.bg,gap:16,fontFamily:"Georgia,serif"}}>
+      <div style={{fontSize:40}}>🧶</div>
+      <div style={{fontSize:16,fontWeight:300,letterSpacing:"0.1em",textTransform:"uppercase",color:T.inkMid}}>{texto}</div>
+    </div>
+  );
+}
 function useIsMobile() {
   const [mob, setMob] = useState(window.innerWidth < 768);
   useEffect(() => {
@@ -226,6 +235,47 @@ function useIsMobile() {
     return () => window.removeEventListener("resize", h);
   }, []);
   return mob;
+}
+
+// ═══════════════════════ LOGIN ═══════════════════════
+function Login() {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const entrar = async () => {
+    if (!email.trim() || !pass) { setErr("Completá el email y la contraseña."); return; }
+    setBusy(true);
+    setErr("");
+    const e = await signIn(email.trim(), pass);
+    if (e) {
+      const bajo = e.toLowerCase();
+      setErr(bajo.includes("invalid") ? "Email o contraseña incorrectos." : "No se pudo ingresar: " + e);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:"1.5rem",fontFamily:"Georgia,serif"}}>
+      <div style={{width:"100%",maxWidth:380}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div style={{fontSize:44,marginBottom:10}}>🧶</div>
+          <div style={{fontSize:20,fontWeight:400,letterSpacing:"0.16em",textTransform:"uppercase",color:T.ink}}>Junco Verde</div>
+          <div style={{fontSize:12,color:T.inkLt,marginTop:4}}>Taller · acceso privado</div>
+        </div>
+        <form onSubmit={ev => { ev.preventDefault(); entrar(); }}>
+          <Card>
+            <Inp label="Email" type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com"/>
+            <Inp label="Contraseña" type="password" autoComplete="current-password" value={pass} onChange={e => setPass(e.target.value)}/>
+            {err ? <div style={{background:T.dangerLt,border:"1px solid "+T.danger,borderRadius:2,padding:"8px 12px",marginBottom:14,fontSize:12,color:T.danger}}>{err}</div> : null}
+            <button type="submit" disabled={busy} style={{width:"100%",padding:"11px",border:"none",borderRadius:2,background:T.green,color:"#fff",cursor:busy?"wait":"pointer",fontSize:14,fontWeight:500,fontFamily:"inherit",opacity:busy?0.7:1}}>{busy ? "Ingresando…" : "Ingresar"}</button>
+          </Card>
+        </form>
+        <div style={{textAlign:"center",fontSize:11,color:T.inkLt}}>Si no tenés usuario, pedíselo a quien administra el taller.</div>
+      </div>
+    </div>
+  );
 }
 
 // ═══════════════════════ DASHBOARD ═══════════════════════
@@ -477,18 +527,20 @@ function ModalOrden({ p, onClose }) {
 
 function Pedidos() {
   const A = useApp();
-  const { mob, pedidos, clientes, artesanas, getPrenda, sp, sa, cambiarEstado, setTab } = A;
+  const { mob, pedidos, clientes, artesanas, getPrenda, sp, sa, cambiarEstado, setTab, catData, nombres, catOf } = A;
   const [filtEst, setFiltEst] = useState("Todos");
   const [filtArt, setFiltArt] = useState("Todas");
   const [nPed, setNPed] = useState(null);
   const [accion, setAccion] = useState(null);
 
+  const tallesDe = n => tallesParaPrenda(n, catOf(n));
   const nuevoVacio = () => {
     const disp = artesanas.filter(a => a.disponible)[0] || artesanas[0];
+    const primera = nombres[0] || "";
     return {
       cliente: clientes[0] ? clientes[0].nombre : "",
-      prenda: NOMBRES[0],
-      talle: tallesParaPrenda(NOMBRES[0])[0],
+      prenda: primera,
+      talle: tallesDe(primera)[0],
       artesana: disp ? disp.nombre : "",
       cantidad: "1", fechaEntrega: hoy(), notas: "", estado: "Pendiente", pagado: "",
       coleccion: "", envioEstado: "Sin envío", envioTracking: "", envioEmpresa: "", envioFecha: ""
@@ -621,12 +673,12 @@ function Pedidos() {
           <Sel label="Cliente" value={nPed.cliente} onChange={e => setNPed(Object.assign({}, nPed, {cliente:e.target.value}))}>
             {clientes.map(c => <option key={c.id}>{c.nombre}</option>)}
           </Sel>
-          <Sel label="Prenda" value={nPed.prenda} onChange={e => setNPed(Object.assign({}, nPed, {prenda:e.target.value, talle:tallesParaPrenda(e.target.value)[0] || ""}))}>
-            {Object.entries(CAT_DATA).map(([cat, items]) => <optgroup key={cat} label={cat}>{items.map(p => <option key={p.n} value={p.n}>{p.n}</option>)}</optgroup>)}
+          <Sel label="Prenda" value={nPed.prenda} onChange={e => setNPed(Object.assign({}, nPed, {prenda:e.target.value, talle:tallesDe(e.target.value)[0] || ""}))}>
+            {Object.entries(catData).map(([cat, items]) => <optgroup key={cat} label={cat}>{items.map(p => <option key={p.n} value={p.n}>{p.n}</option>)}</optgroup>)}
           </Sel>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
             <Sel label="Talle" value={nPed.talle} onChange={e => setNPed(Object.assign({}, nPed, {talle:e.target.value}))}>
-              {tallesParaPrenda(nPed.prenda).map(t => <option key={t}>{t}</option>)}
+              {tallesDe(nPed.prenda).map(t => <option key={t}>{t}</option>)}
             </Sel>
             <Sel label="Artesana" value={nPed.artesana} onChange={e => setNPed(Object.assign({}, nPed, {artesana:e.target.value}))}>
               {artesanas.map(a => <option key={a.id}>{a.nombre}</option>)}
@@ -649,7 +701,7 @@ function Pedidos() {
           ) : null}
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid "+T.borderLt}}>
             <Btn onClick={() => setNPed(null)}>Cancelar</Btn>
-            <Btn variant="primary" onClick={crear} disabled={!nPed.cliente || !nPed.artesana}>Crear pedido</Btn>
+            <Btn variant="primary" onClick={crear} disabled={!nPed.cliente || !nPed.artesana || !nPed.prenda}>Crear pedido</Btn>
           </div>
         </Ov>
       ) : null}
@@ -822,7 +874,7 @@ function FichaArtesana({ a, onClose }) {
 }
 
 function Artesanas() {
-  const { mob, artesanas, sa, statsArt, capArt } = useApp();
+  const { mob, artesanas, sa, statsArt, capArt, nombres } = useApp();
   const [editA, setEditA] = useState(null);
   const [fichaA, setFichaA] = useState(null);
   const vacia = () => ({id: Date.now(), nombre: "", especialidad: "", tecnicas: [], prendas_habituales: [], disponible: true, lana_asignada: "", capacidad_semanal: "2", notas: ""});
@@ -923,7 +975,7 @@ function Artesanas() {
           <div style={{marginBottom:14}}>
             <div style={{fontSize:11,color:T.inkMid,marginBottom:6}}>Prendas que teje</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:5,maxHeight:120,overflowY:"auto"}}>
-              {NOMBRES.map(n => {
+              {nombres.map(n => {
                 const on = editA.prendas_habituales.includes(n);
                 return <span key={n} onClick={() => toggle("prendas_habituales", n)} style={{padding:"3px 9px",borderRadius:99,fontSize:11,cursor:"pointer",background:on?T.greenLt:"transparent",color:on?T.green:T.inkMid,border:"1px solid "+(on?T.green:T.border)}}>{n}</span>;
               })}
@@ -1088,13 +1140,13 @@ function PagosArt() {
 
 // ═══════════════════════ PRODUCCIÓN ═══════════════════════
 function Planif() {
-  const { artesanas, activos, lanas, cfg, getPrenda, capArt, setTab } = useApp();
+  const { artesanas, activos, lanas, cfg, getPrenda, capArt, setTab, catData, nombres } = useApp();
   const [simCant, setSimCant] = useState("1");
-  const [simPrenda, setSimPrenda] = useState(NOMBRES[0]);
-  const pr = getPrenda(simPrenda);
+  const [simPrenda, setSimPrenda] = useState(nombres[0] || "");
+  const pr = getPrenda(simPrenda) || {p: 0, c: 0, lana: 0};
   const cant = Math.max(1, num(simCant));
   const lanaTotal = lanas.reduce((a, l) => a + l.stock, 0);
-  const lanaNec = (pr ? pr.lana : 0) * cant;
+  const lanaNec = pr.lana * cant;
   const tiempo = cfg.tiemposProd[simPrenda] || 14;
 
   if (artesanas.length === 0) {
@@ -1128,7 +1180,7 @@ function Planif() {
         <div style={{fontSize:11,color:T.inkMid,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:12}}>Simulador</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
           <Sel label="Prenda" value={simPrenda} onChange={e => setSimPrenda(e.target.value)}>
-            {Object.entries(CAT_DATA).map(([cat, items]) => <optgroup key={cat} label={cat}>{items.map(p => <option key={p.n} value={p.n}>{p.n}</option>)}</optgroup>)}
+            {Object.entries(catData).map(([cat, items]) => <optgroup key={cat} label={cat}>{items.map(p => <option key={p.n} value={p.n}>{p.n}</option>)}</optgroup>)}
           </Sel>
           <Inp label="Cantidad" type="number" min="1" value={simCant} onChange={e => setSimCant(e.target.value)}/>
         </div>
@@ -1234,7 +1286,7 @@ function Analisis() {
                 <thead><tr style={{background:T.bg}}><TH>Prenda</TH><TH>Unidades</TH><TH>Venta</TH><TH>Margen unit.</TH><TH>Margen %</TH></tr></thead>
                 <tbody>
                   {topPrendas.map((p, i) => {
-                    const pr = getPrenda(p.n);
+                    const pr = getPrenda(p.n) || {p: 0, c: 0};
                     const mg = pr.p - pr.c;
                     const mgp = pr.p ? Math.round(mg / pr.p * 100) : 0;
                     return (
@@ -1321,13 +1373,14 @@ function Analisis() {
 
 // ═══════════════════════ STOCK DE PRENDAS ═══════════════════════
 function StockPrendas() {
-  const { stockP, ss, cfg, getPrenda } = useApp();
+  const { stockP, ss, cfg, getPrenda, catData, nombres } = useApp();
   const [addM, setAddM] = useState(false);
-  const [ns, setNs] = useState({prenda: NOMBRES[0], qty: "1"});
+  const [ns, setNs] = useState({prenda: nombres[0] || "", qty: "1"});
   const [busq, setBusq] = useState("");
   const filt = stockP.filter(s => s.prenda.toLowerCase().includes(busq.toLowerCase()));
   const agregar = () => {
     const pr = getPrenda(ns.prenda);
+    if (!pr) return;
     const q = Math.max(1, num(ns.qty));
     const ex = stockP.find(x => x.prenda === ns.prenda);
     if (ex) ss(stockP.map(x => x.prenda === ns.prenda ? Object.assign({}, x, {qty: x.qty + q}) : x));
@@ -1383,12 +1436,12 @@ function StockPrendas() {
         <Ov onClose={() => setAddM(false)}>
           <MTitle onClose={() => setAddM(false)}>Agregar stock</MTitle>
           <Sel label="Prenda" value={ns.prenda} onChange={e => setNs(Object.assign({}, ns, {prenda:e.target.value}))}>
-            {Object.entries(CAT_DATA).map(([cat, items]) => <optgroup key={cat} label={cat}>{items.map(p => <option key={p.n} value={p.n}>{p.n}</option>)}</optgroup>)}
+            {Object.entries(catData).map(([cat, items]) => <optgroup key={cat} label={cat}>{items.map(p => <option key={p.n} value={p.n}>{p.n}</option>)}</optgroup>)}
           </Sel>
           <Inp label="Cantidad" type="number" min="1" value={ns.qty} onChange={e => setNs(Object.assign({}, ns, {qty:e.target.value}))}/>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid "+T.borderLt}}>
             <Btn onClick={() => setAddM(false)}>Cancelar</Btn>
-            <Btn variant="primary" onClick={agregar}>Agregar</Btn>
+            <Btn variant="primary" disabled={!ns.prenda} onClick={agregar}>Agregar</Btn>
           </div>
         </Ov>
       ) : null}
@@ -1585,7 +1638,7 @@ function Talles() {
 
 // ═══════════════════════ COMPROBANTES ═══════════════════════
 function Comprobantes() {
-  const { comps, sco, provs, spr, clientes, sc, lanas, sl, stockP, ss, pedidos, sp, cfg } = useApp();
+  const { comps, sco, provs, spr, clientes, sc, lanas, sl, stockP, ss, pedidos, sp, cfg, todosNombres } = useApp();
   const [vista, setVista] = useState("lista");
   const [selComp, setSelComp] = useState(null);
   const [filtTipo, setFiltTipo] = useState("Todos");
@@ -1635,7 +1688,7 @@ function Comprobantes() {
       let cambioS = false;
       comp.items.forEach(it => {
         const desc = it.descripcion.toLowerCase();
-        const n = NOMBRES.find(nm => desc.includes(nm.toLowerCase()));
+        const n = todosNombres.find(nm => desc.includes(nm.toLowerCase()));
         if (n) {
           nuevoStock = nuevoStock.map(s => s.prenda === n ? Object.assign({}, s, {qty: Math.max(0, s.qty - it.qty)}) : s);
           cambioS = true;
@@ -1845,79 +1898,168 @@ function Comprobantes() {
 
 // ═══════════════════════ CONFIGURACIÓN ═══════════════════════
 function CatalogEditor() {
-  const { catalogo, saveCatalogo } = useApp();
-  const [vals, setVals] = useState(() => {
-    const o = {};
-    NOMBRES.forEach(n => {
-      const c = catalogo[n] || {};
-      o[n] = {c: c.c ? String(c.c) : "", pv: c.p ? String(c.p) : "", lana: c.lana ? String(c.lana) : ""};
-    });
-    return o;
-  });
+  const { catalogo, saveCatalogo, catAll, todosNombres, pedidos, stockP } = useApp();
+  const [vals, setVals] = useState({});
   const [msg, setMsg] = useState("");
-  const upd = (n, k, v) => setVals(prev => Object.assign({}, prev, {[n]: Object.assign({}, prev[n], {[k]: v})}));
+  const [mostrarDisc, setMostrarDisc] = useState(false);
+  const [nueva, setNueva] = useState(null);
+  const [errNueva, setErrNueva] = useState("");
+
+  const desdeCatalogo = n => {
+    const c = catalogo[n] || {};
+    return {c: c.c ? String(c.c) : "", pv: c.p ? String(c.p) : "", lana: c.lana ? String(c.lana) : ""};
+  };
+  const get = n => vals[n] || desdeCatalogo(n);
+  const upd = (n, k, v) => setVals(prev => Object.assign({}, prev, {[n]: Object.assign({}, prev[n] || desdeCatalogo(n), {[k]: v})}));
+  const valorDe = n => { const v = get(n); return {c: num(v.c), p: num(v.pv), lana: num(v.lana)}; };
+  const aviso = t => { setMsg(t); setTimeout(() => setMsg(""), 3000); };
+
   const guardarCats = (cats, etiqueta) => {
     const next = Object.assign({}, catalogo);
     cats.forEach(cat => {
-      CAT_DATA[cat].forEach(p => {
-        const v = vals[p.n];
-        next[p.n] = {c: num(v.c), p: num(v.pv), lana: num(v.lana)};
+      (catAll[cat] || []).forEach(p => {
+        next[p.n] = Object.assign({}, catalogo[p.n] || {}, valorDe(p.n));
       });
     });
     saveCatalogo(next);
-    setMsg("✓ " + etiqueta + " guardado");
-    setTimeout(() => setMsg(""), 2500);
+    aviso("✓ " + etiqueta + " guardado");
   };
+
+  const discontinuar = n => {
+    if (!window.confirm("¿Discontinuar \"" + n + "\"?\n\nDeja de aparecer al crear pedidos y stock, pero los pedidos anteriores se conservan. Podés reactivarla cuando quieras.")) return;
+    const next = Object.assign({}, catalogo);
+    next[n] = Object.assign({}, catalogo[n] || {}, valorDe(n), {descontinuada: true});
+    saveCatalogo(next);
+    aviso("✓ \"" + n + "\" discontinuada");
+  };
+  const reactivar = n => {
+    const next = Object.assign({}, catalogo);
+    next[n] = Object.assign({}, catalogo[n] || {}, {descontinuada: false});
+    saveCatalogo(next);
+    aviso("✓ \"" + n + "\" reactivada");
+  };
+  const eliminar = n => {
+    const enUso = pedidos.some(p => p.prenda === n) || stockP.some(s => s.prenda === n);
+    if (enUso) {
+      window.alert("\"" + n + "\" tiene pedidos o stock asociados, así que no se puede eliminar. Dejala discontinuada.");
+      return;
+    }
+    if (!window.confirm("¿Eliminar \"" + n + "\" definitivamente?")) return;
+    const next = Object.assign({}, catalogo);
+    delete next[n];
+    saveCatalogo(next);
+    aviso("✓ \"" + n + "\" eliminada");
+  };
+
+  const abrirNueva = () => {
+    setErrNueva("");
+    setNueva({nombre: "", cat: Object.keys(catAll)[0] || "__nueva", catNueva: "", c: "", p: "", lana: ""});
+  };
+  const crearNueva = () => {
+    const nombre = nueva.nombre.trim();
+    const cat = nueva.cat === "__nueva" ? nueva.catNueva.trim() : nueva.cat;
+    if (!nombre) { setErrNueva("Escribí el nombre de la prenda."); return; }
+    if (!cat) { setErrNueva("Elegí una categoría o escribí una nueva."); return; }
+    if (todosNombres.some(x => x.toLowerCase() === nombre.toLowerCase())) { setErrNueva("Ya existe una prenda con ese nombre."); return; }
+    const next = Object.assign({}, catalogo);
+    next[nombre] = {custom: true, cat: cat, c: num(nueva.c), p: num(nueva.p), lana: num(nueva.lana), descontinuada: false};
+    saveCatalogo(next);
+    setNueva(null);
+    aviso("✓ \"" + nombre + "\" agregada");
+  };
+
   const campo = (n, k, w) => (
-    <input type="number" min="0" placeholder="0" value={vals[n][k]} onChange={e => upd(n, k, e.target.value)}
+    <input type="number" min="0" placeholder="0" value={get(n)[k]} onChange={e => upd(n, k, e.target.value)}
       style={{width:w,padding:"5px 8px",border:"1px solid "+T.border,borderRadius:2,fontSize:12,background:T.bgCard,color:T.ink,fontFamily:"inherit"}}/>
   );
-  const todas = Object.keys(CAT_DATA);
+  const cats = Object.keys(catAll);
+  const cantDisc = Object.values(catAll).reduce((a, arr) => a + arr.filter(p => p.descontinuada).length, 0);
+  const tag = (txt, bg, tx) => <span style={{fontSize:9,padding:"1px 7px",borderRadius:99,background:bg,color:tx,marginLeft:6,whiteSpace:"nowrap"}}>{txt}</span>;
+
   return (
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:16}}>
         <div style={{background:T.warnLt,border:"1px solid "+T.warn,borderRadius:4,padding:"10px 14px",fontSize:13,color:T.warn,flex:1,minWidth:240}}>
           Completá costo, precio y gramos de lana. Después apretá Guardar.
         </div>
-        <div style={{display:"flex",gap:10,alignItems:"center"}}>
-          {msg ? <span style={{fontSize:12,color:T.ok,padding:"6px 12px",background:T.okLt,borderRadius:2}}>{msg}</span> : null}
-          <Btn variant="primary" onClick={() => guardarCats(todas, "Catálogo completo")}>Guardar todo el catálogo</Btn>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <Btn onClick={abrirNueva}>+ Nueva prenda</Btn>
+          <Btn variant="primary" onClick={() => guardarCats(cats, "Catálogo completo")}>Guardar todo</Btn>
         </div>
       </div>
-      {todas.map(cat => (
-        <Card key={cat} style={{marginBottom:12,padding:"1.25rem",overflow:"auto"}}>
-          <div style={{fontSize:11,color:T.inkMid,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:14}}>{cat}</div>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:480}}>
-            <thead><tr style={{background:T.bg}}><TH>Prenda</TH><TH>Costo ($)</TH><TH>Precio ($)</TH><TH>Lana (g)</TH><TH>Margen</TH></tr></thead>
-            <tbody>
-              {CAT_DATA[cat].map((p, i) => {
-                const v = vals[p.n];
-                const c = num(v.c);
-                const pv = num(v.pv);
-                const mg = pv > 0 ? Math.round((pv - c) / pv * 100) : null;
-                const bg = mg === null ? T.bgMuted : (mg > 50 ? T.okLt : (mg > 30 ? T.warnLt : T.dangerLt));
-                const tx = mg === null ? T.inkLt : (mg > 50 ? T.ok : (mg > 30 ? T.warn : T.danger));
-                return (
-                  <tr key={p.n} style={{background:i%2===0?T.bgCard:T.bg}}>
-                    <TD style={{fontWeight:500,fontSize:12}}>{p.n}</TD>
-                    <TD>{campo(p.n, "c", 90)}</TD>
-                    <TD>{campo(p.n, "pv", 90)}</TD>
-                    <TD>{campo(p.n, "lana", 80)}</TD>
-                    <TD>{mg !== null ? <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:bg,color:tx}}>{mg}%</span> : <span style={{fontSize:11,color:T.inkLt}}>—</span>}</TD>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <div style={{marginTop:10,textAlign:"right"}}><Btn small variant="primary" onClick={() => guardarCats([cat], cat)}>Guardar {cat}</Btn></div>
-        </Card>
-      ))}
+      {msg ? <div style={{background:T.okLt,border:"1px solid "+T.ok,borderRadius:4,padding:"9px 14px",marginBottom:14,fontSize:13,color:T.ok}}>{msg}</div> : null}
+      {cantDisc > 0 ? (
+        <div style={{marginBottom:14}}>
+          <Pill active={mostrarDisc} onClick={() => setMostrarDisc(!mostrarDisc)} color={T.tierra}>{mostrarDisc ? "Ocultar" : "Mostrar"} descontinuadas ({cantDisc})</Pill>
+        </div>
+      ) : null}
+
+      {cats.map(cat => {
+        const visibles = catAll[cat].filter(p => mostrarDisc || !p.descontinuada);
+        if (visibles.length === 0) return null;
+        return (
+          <Card key={cat} style={{marginBottom:12,padding:"1.25rem",overflow:"auto"}}>
+            <div style={{fontSize:11,color:T.inkMid,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:14}}>{cat}</div>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:620}}>
+              <thead><tr style={{background:T.bg}}><TH>Prenda</TH><TH>Costo ($)</TH><TH>Precio ($)</TH><TH>Lana (g)</TH><TH>Margen</TH><TH></TH></tr></thead>
+              <tbody>
+                {visibles.map((p, i) => {
+                  const v = get(p.n);
+                  const c = num(v.c);
+                  const pv = num(v.pv);
+                  const mg = pv > 0 ? Math.round((pv - c) / pv * 100) : null;
+                  const bg = mg === null ? T.bgMuted : (mg > 50 ? T.okLt : (mg > 30 ? T.warnLt : T.dangerLt));
+                  const tx = mg === null ? T.inkLt : (mg > 50 ? T.ok : (mg > 30 ? T.warn : T.danger));
+                  return (
+                    <tr key={p.n} style={{background:p.descontinuada ? T.bgMuted : (i%2===0?T.bgCard:T.bg),opacity:p.descontinuada?0.75:1}}>
+                      <TD style={{fontWeight:500,fontSize:12}}>{p.n}{p.custom ? tag("propia", T.violetLt, T.violet) : null}{p.descontinuada ? tag("descontinuada", T.warnLt, T.warn) : null}</TD>
+                      <TD>{campo(p.n, "c", 90)}</TD>
+                      <TD>{campo(p.n, "pv", 90)}</TD>
+                      <TD>{campo(p.n, "lana", 80)}</TD>
+                      <TD>{mg !== null ? <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:bg,color:tx}}>{mg}%</span> : <span style={{fontSize:11,color:T.inkLt}}>—</span>}</TD>
+                      <TD>
+                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                          {p.descontinuada ? <Btn small onClick={() => reactivar(p.n)}>Reactivar</Btn> : <Btn small onClick={() => discontinuar(p.n)}>Discontinuar</Btn>}
+                          {p.custom ? <Btn small onClick={() => eliminar(p.n)}>Eliminar</Btn> : null}
+                        </div>
+                      </TD>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div style={{marginTop:10,textAlign:"right"}}><Btn small variant="primary" onClick={() => guardarCats([cat], cat)}>Guardar {cat}</Btn></div>
+          </Card>
+        );
+      })}
+
+      {nueva ? (
+        <Ov onClose={() => setNueva(null)}>
+          <MTitle onClose={() => setNueva(null)}>Nueva prenda</MTitle>
+          <Inp label="Nombre de la prenda" value={nueva.nombre} onChange={e => setNueva(Object.assign({}, nueva, {nombre:e.target.value}))} placeholder="Ej: Chaleco Aurora"/>
+          <Sel label="Categoría" value={nueva.cat} onChange={e => setNueva(Object.assign({}, nueva, {cat:e.target.value}))}>
+            {cats.map(c => <option key={c} value={c}>{c}</option>)}
+            <option value="__nueva">+ Crear categoría nueva…</option>
+          </Sel>
+          {nueva.cat === "__nueva" ? <Inp label="Nombre de la categoría nueva" value={nueva.catNueva} onChange={e => setNueva(Object.assign({}, nueva, {catNueva:e.target.value}))} placeholder="Ej: Accesorios"/> : null}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            <Inp label="Costo ($)" type="number" min="0" placeholder="0" value={nueva.c} onChange={e => setNueva(Object.assign({}, nueva, {c:e.target.value}))}/>
+            <Inp label="Precio ($)" type="number" min="0" placeholder="0" value={nueva.p} onChange={e => setNueva(Object.assign({}, nueva, {p:e.target.value}))}/>
+            <Inp label="Lana (g)" type="number" min="0" placeholder="0" value={nueva.lana} onChange={e => setNueva(Object.assign({}, nueva, {lana:e.target.value}))}/>
+          </div>
+          {errNueva ? <div style={{background:T.dangerLt,border:"1px solid "+T.danger,borderRadius:2,padding:"8px 12px",marginBottom:12,fontSize:12,color:T.danger}}>{errNueva}</div> : null}
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid "+T.borderLt}}>
+            <Btn onClick={() => setNueva(null)}>Cancelar</Btn>
+            <Btn variant="primary" onClick={crearNueva}>Agregar prenda</Btn>
+          </div>
+        </Ov>
+      ) : null}
     </div>
   );
 }
 
 function Config() {
-  const { cfg, scfg } = useApp();
+  const { cfg, scfg, catData } = useApp();
   const [sec, setSec] = useState("catalogo");
   const [lc, setLc] = useState(() => ({
     alertaEntregaDias: String(cfg.alertaEntregaDias),
@@ -1977,7 +2119,7 @@ function Config() {
 
       {sec === "tiempos" ? (
         <div>
-          {Object.entries(CAT_DATA).map(([cat, items]) => (
+          {Object.entries(catData).map(([cat, items]) => (
             <Card key={cat} style={{marginBottom:12}}>
               <div style={{fontSize:11,color:T.inkMid,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:16}}>{cat}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
@@ -2036,7 +2178,7 @@ const PANTALLAS = {
 };
 const CLAVES = ["pedidos","stock_prendas","lanas","artesanas","clientes","comprobantes","proveedores","pagos_artesanas","talles","configuracion","catalogo"];
 
-export default function App() {
+function Taller({ email, onLogout }) {
   const mob = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -2085,6 +2227,59 @@ export default function App() {
     cargar();
   }, []);
 
+  // Catálogo efectivo: prendas base + prendas propias; activas y descontinuadas
+  const todasPrendas = useMemo(() => {
+    const m = {};
+    Object.keys(BASE_CAT).forEach(n => { m[n] = {n: n, cat: BASE_CAT[n], custom: false}; });
+    Object.keys(catalogo).forEach(n => {
+      const o = catalogo[n];
+      if (o && o.custom) m[n] = {n: n, cat: o.cat || "Otros", custom: true};
+    });
+    return m;
+  }, [catalogo]);
+
+  const catInfo = useMemo(() => {
+    const all = {};
+    const act = {};
+    Object.keys(CAT_DATA).forEach(c => { all[c] = []; act[c] = []; });
+    Object.values(todasPrendas).forEach(b => {
+      const o = catalogo[b.n] || {};
+      if (!all[b.cat]) { all[b.cat] = []; act[b.cat] = []; }
+      all[b.cat].push({n: b.n, custom: b.custom, descontinuada: !!o.descontinuada});
+      if (!o.descontinuada) act[b.cat].push({n: b.n});
+    });
+    Object.keys(act).forEach(c => { if (act[c].length === 0) delete act[c]; });
+    Object.keys(all).forEach(c => { if (all[c].length === 0) delete all[c]; });
+    const flat = [];
+    Object.keys(act).forEach(c => { act[c].forEach(p => flat.push(p.n)); });
+    return {catAll: all, catData: act, nombres: flat};
+  }, [todasPrendas, catalogo]);
+
+  const finanzasMes = useMemo(() => {
+    const m = {};
+    pedidos.filter(p => p.estado === "Entregado").forEach(p => {
+      const mes = p.fechaEntrega ? p.fechaEntrega.slice(0, 7) : "";
+      if (!mes) return;
+      const o = catalogo[p.prenda] || {};
+      if (!m[mes]) m[mes] = {mes: mes, venta: 0, costo: 0, prendas: 0};
+      m[mes].venta += (o.p || 0) * p.cantidad;
+      m[mes].costo += (o.c || 0) * p.cantidad;
+      m[mes].prendas += p.cantidad;
+    });
+    return Object.values(m).sort((a, b) => a.mes.localeCompare(b.mes)).slice(-6);
+  }, [pedidos, catalogo]);
+
+  const topPrendas = useMemo(() => {
+    const m = {};
+    pedidos.forEach(p => {
+      if (!m[p.prenda]) m[p.prenda] = {n: p.prenda, qty: 0, venta: 0};
+      m[p.prenda].qty += p.cantidad;
+      const o = catalogo[p.prenda] || {};
+      m[p.prenda].venta += (o.p || 0) * p.cantidad;
+    });
+    return Object.values(m).sort((a, b) => b.qty - a.qty).slice(0, 6);
+  }, [pedidos, catalogo]);
+
   // Guardado en Supabase
   const persist = (tabla, valor) => {
     if (!loadOk.current) { setSync("error"); return; }
@@ -2104,11 +2299,12 @@ export default function App() {
   const saveCatalogo = v => { setCatalogo(v); persist("catalogo", v); };
 
   const getPrenda = n => {
-    const b = CAT_BASE[n];
+    const b = todasPrendas[n];
     if (!b) return null;
     const o = catalogo[n] || {};
-    return {n: n, cat: b.cat, c: o.c || 0, p: o.p || 0, lana: o.lana || 0};
+    return {n: n, cat: b.cat, custom: b.custom, c: o.c || 0, p: o.p || 0, lana: o.lana || 0, descontinuada: !!o.descontinuada};
   };
+  const catOf = n => (todasPrendas[n] ? todasPrendas[n].cat : "");
 
   const activos = pedidos.filter(p => p.estado !== "Entregado");
   const totalVenta = activos.reduce((a, p) => { const pr = getPrenda(p.prenda); return a + (pr ? pr.p : 0) * p.cantidad; }, 0);
@@ -2161,30 +2357,6 @@ export default function App() {
     const totalMO = entg.reduce((a, p) => a + moSugerida(p), 0);
     return {pag: pag, totalPag: totalPag, totalMO: totalMO, pendiente: Math.max(0, totalMO - totalPag), entg: entg};
   };
-  const finanzasMes = useMemo(() => {
-    const m = {};
-    pedidos.filter(p => p.estado === "Entregado").forEach(p => {
-      const mes = p.fechaEntrega ? p.fechaEntrega.slice(0, 7) : "";
-      if (!mes) return;
-      const b = CAT_BASE[p.prenda];
-      const o = catalogo[p.prenda] || {};
-      if (!m[mes]) m[mes] = {mes: mes, venta: 0, costo: 0, prendas: 0};
-      m[mes].venta += (b ? (o.p || 0) : 0) * p.cantidad;
-      m[mes].costo += (b ? (o.c || 0) : 0) * p.cantidad;
-      m[mes].prendas += p.cantidad;
-    });
-    return Object.values(m).sort((a, b) => a.mes.localeCompare(b.mes)).slice(-6);
-  }, [pedidos, catalogo]);
-  const topPrendas = useMemo(() => {
-    const m = {};
-    pedidos.forEach(p => {
-      if (!m[p.prenda]) m[p.prenda] = {n: p.prenda, qty: 0, venta: 0};
-      m[p.prenda].qty += p.cantidad;
-      const o = catalogo[p.prenda] || {};
-      m[p.prenda].venta += (o.p || 0) * p.cantidad;
-    });
-    return Object.values(m).sort((a, b) => b.qty - a.qty).slice(0, 6);
-  }, [pedidos, catalogo]);
 
   const cambiarEstado = (id, est) => {
     const p = pedidos.find(x => x.id === id);
@@ -2199,31 +2371,28 @@ export default function App() {
     sp(pedidos.map(x => x.id === id ? Object.assign({}, x, {estado: est}) : x));
   };
 
-  if (loading) {
-    return (
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:T.bg,gap:16,fontFamily:"Georgia,serif"}}>
-        <div style={{fontSize:40}}>🧶</div>
-        <div style={{fontSize:16,fontWeight:300,letterSpacing:"0.1em",textTransform:"uppercase",color:T.inkMid}}>Cargando Junco Verde…</div>
-      </div>
-    );
-  }
+  if (loading) return <Splash texto="Cargando Junco Verde…"/>;
   if (loadError) {
     return (
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:T.bg,gap:14,fontFamily:"Georgia,serif",padding:"2rem",textAlign:"center"}}>
         <div style={{fontSize:40}}>⚠️</div>
         <div style={{fontSize:18,color:T.danger}}>No se pudieron cargar los datos</div>
         <div style={{fontSize:13,color:T.inkMid,maxWidth:380}}>Para no pisar la información guardada, la app no deja editar hasta poder leerla. Revisá la conexión y que las variables de Supabase estén cargadas, y recargá.</div>
-        <Btn variant="primary" onClick={() => window.location.reload()}>Reintentar</Btn>
+        <div style={{display:"flex",gap:8}}>
+          <Btn variant="primary" onClick={() => window.location.reload()}>Reintentar</Btn>
+          <Btn onClick={onLogout}>Cerrar sesión</Btn>
+        </div>
       </div>
     );
   }
 
   const A = {
-    mob: mob, tab: tab, setTab: setTab,
+    mob: mob, tab: tab, setTab: setTab, email: email,
     pedidos: pedidos, sp: sp, stockP: stockP, ss: ss, lanas: lanas, sl: sl,
     artesanas: artesanas, sa: sa, clientes: clientes, sc: sc, comps: comps, sco: sco,
     provs: provs, spr: spr, pagosArt: pagosArt, spa: spa, talles: talles, stl: stl,
-    cfg: cfg, scfg: scfg, catalogo: catalogo, saveCatalogo: saveCatalogo, getPrenda: getPrenda,
+    cfg: cfg, scfg: scfg, catalogo: catalogo, saveCatalogo: saveCatalogo, getPrenda: getPrenda, catOf: catOf,
+    catAll: catInfo.catAll, catData: catInfo.catData, nombres: catInfo.nombres, todosNombres: Object.keys(todasPrendas),
     activos: activos, totalVenta: totalVenta, totalCosto: totalCosto, totalCobrado: totalCobrado,
     urgentes: urgentes, lanasBajas: lanasBajas,
     statsCliente: statsCliente, statsArt: statsArt, capArt: capArt, moSugerida: moSugerida,
@@ -2237,15 +2406,18 @@ export default function App() {
   return (
     <Ctx.Provider value={A}>
       <div style={{fontFamily:"'Georgia',serif",minHeight:"100vh",background:T.bg,color:T.ink,paddingBottom:mob?72:0}}>
-        <div style={{background:T.bgCard,borderBottom:"1px solid "+T.border,padding:"0 "+(mob?"1rem":"1.5rem"),display:"flex",alignItems:"center",justifyContent:"space-between",height:mob?48:52,position:"sticky",top:0,zIndex:100}}>
-          <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+        <div style={{background:T.bgCard,borderBottom:"1px solid "+T.border,padding:"0 "+(mob?"1rem":"1.5rem"),display:"flex",alignItems:"center",justifyContent:"space-between",height:mob?48:52,position:"sticky",top:0,zIndex:100,gap:12}}>
+          <div style={{display:"flex",alignItems:"baseline",gap:8,flexShrink:0}}>
             <span style={{fontSize:mob?14:16,fontWeight:400,letterSpacing:"0.14em",textTransform:"uppercase"}}>Junco Verde</span>
             <span style={{fontSize:10,color:syncCol}}>{syncTxt}</span>
           </div>
           {!mob ? (
-            <nav style={{display:"flex",overflowX:"auto"}}>
-              {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={{padding:"0 12px",height:52,border:"none",borderBottom:tab===t.id?"2px solid "+T.green:"2px solid transparent",background:"transparent",color:tab===t.id?T.green:T.inkMid,cursor:"pointer",fontSize:12,letterSpacing:"0.04em",fontFamily:"inherit",whiteSpace:"nowrap"}}>{t.l}</button>)}
-            </nav>
+            <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+              <nav style={{display:"flex",overflowX:"auto"}}>
+                {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={{padding:"0 12px",height:52,border:"none",borderBottom:tab===t.id?"2px solid "+T.green:"2px solid transparent",background:"transparent",color:tab===t.id?T.green:T.inkMid,cursor:"pointer",fontSize:12,letterSpacing:"0.04em",fontFamily:"inherit",whiteSpace:"nowrap"}}>{t.l}</button>)}
+              </nav>
+              <Btn small onClick={onLogout}>Salir</Btn>
+            </div>
           ) : (
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:13,color:T.inkMid}}>{tab === "__menu" ? "Menú" : TABS.find(t => t.id === tab).l}</span>
@@ -2257,8 +2429,12 @@ export default function App() {
         {mob && tab === "__menu" ? (
           <div style={{position:"fixed",top:48,left:0,right:0,bottom:0,background:T.bgCard,zIndex:99,overflowY:"auto",padding:"1rem"}}>
             <div style={{fontSize:11,color:T.inkLt,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12}}>Todas las secciones</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
               {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",borderRadius:4,border:"1px solid "+T.border,background:T.bgCard,cursor:"pointer",fontSize:13,fontFamily:"inherit",color:T.ink,textAlign:"left"}}><span style={{fontSize:20}}>{t.icon}</span><span>{t.l}</span></button>)}
+            </div>
+            <div style={{borderTop:"1px solid "+T.borderLt,paddingTop:14}}>
+              <div style={{fontSize:11,color:T.inkLt,marginBottom:8,wordBreak:"break-all"}}>Sesión: {email}</div>
+              <Btn onClick={onLogout}>Cerrar sesión</Btn>
             </div>
           </div>
         ) : null}
@@ -2287,4 +2463,20 @@ export default function App() {
       </div>
     </Ctx.Provider>
   );
+}
+
+// ═══════════════════════ RAÍZ: LOGIN + TALLER ═══════════════════════
+export default function App() {
+  const [session, setSession] = useState(undefined); // undefined = verificando
+
+  useEffect(() => {
+    let vivo = true;
+    getSession().then(s => { if (vivo) setSession(s || null); });
+    const dejar = onAuth(s => { if (vivo) setSession(s || null); });
+    return () => { vivo = false; dejar(); };
+  }, []);
+
+  if (session === undefined) return <Splash texto="Cargando…"/>;
+  if (!session) return <Login/>;
+  return <Taller email={session.user ? session.user.email : ""} onLogout={signOut}/>;
 }
