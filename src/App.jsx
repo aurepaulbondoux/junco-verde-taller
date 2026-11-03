@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, createContext, useContext } from "react";
 import { dbGet, dbSet, getSession, onAuth, signIn, signOut } from "./supabase.js";
+import Motivos from "./Motivos.jsx";
 
 // ═══════════════════════ CONSTANTES ═══════════════════════
 const T = {bg:"#faf7f2",bgCard:"#fff",bgMuted:"#f0ebe2",bgDeep:"#e6dfd4",ink:"#1e1c18",inkMid:"#5a5750",inkLt:"#9a9690",border:"#ddd8cf",borderLt:"#eae5dc",green:"#3d5a3e",greenLt:"#e8f0e8",tierra:"#8b6f47",danger:"#b03a2e",dangerLt:"#fdf0ee",warn:"#916a00",warnLt:"#fef8e6",ok:"#2d6a4f",okLt:"#e8f5ee",info:"#2c5f8a",infoLt:"#eaf2f8",violet:"#5b3f7a",violetLt:"#f2eef8"};
@@ -2167,14 +2168,20 @@ const TABS = [
   {id:"stock", l:"Stock prendas", icon:"👗"},
   {id:"lanas", l:"Stock lanas", icon:"🧵"},
   {id:"talles", l:"Talles", icon:"📐"},
+  {id:"motivos", l:"Motivos", icon:"🎨"},
   {id:"comprobantes", l:"Comprobantes", icon:"🧾"},
   {id:"config", l:"Config.", icon:"⚙"}
 ];
 const MOB_TABS = ["dashboard", "pedidos", "artesanas", "pagos_art", "comprobantes"];
+
+function MotivosPantalla() {
+  const A = useApp();
+  return <Motivos lanas={A.lanas} prendas={A.nombres} mob={A.mob}/>;
+}
 const PANTALLAS = {
   dashboard: Dashboard, pedidos: Pedidos, clientes: Clientes, artesanas: Artesanas, pagos_art: PagosArt,
   planif: Planif, analisis: Analisis, stock: StockPrendas, lanas: Lanas, talles: Talles,
-  comprobantes: Comprobantes, config: Config
+  comprobantes: Comprobantes, config: Config, motivos: MotivosPantalla
 };
 const CLAVES = ["pedidos","stock_prendas","lanas","artesanas","clientes","comprobantes","proveedores","pagos_artesanas","talles","configuracion","catalogo"];
 
