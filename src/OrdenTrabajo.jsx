@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { dbGet } from "./supabase.js";
+import { esquemaDe, COLORES_MOTIVO, canvasEsquema, SelectorZonas } from "./EsquemaPrenda.jsx";
 
 // ═══════════════════════ CONSTANTES Y UTILIDADES ═══════════════════════
 const T = {bg:"#faf7f2",bgCard:"#fff",bgMuted:"#f0ebe2",bgDeep:"#e6dfd4",ink:"#1e1c18",inkMid:"#5a5750",inkLt:"#9a9690",border:"#ddd8cf",borderLt:"#eae5dc",green:"#3d5a3e",greenLt:"#e8f0e8",danger:"#b03a2e",dangerLt:"#fdf0ee",warn:"#916a00",warnLt:"#fef8e6",ok:"#2d6a4f",okLt:"#e8f5ee",info:"#2c5f8a",infoLt:"#eaf2f8",violet:"#5b3f7a",violetLt:"#f2eef8"};
@@ -302,6 +303,34 @@ async function construirPDF(d) {
     });
     texto("El detalle de cada motivo (colores, lana y gráfico) está en las páginas siguientes.", M, y, 9, false, GRIS2);
     y += 6;
+
+    // esquema de la prenda con la ubicación de cada motivo
+    const zonasUsadas = {};
+    d.motivos.forEach((m, i) => {
+      (m.zonas || []).forEach(z => {
+        if (!zonasUsadas[z]) zonasUsadas[z] = COLORES_MOTIVO[i % COLORES_MOTIVO.length];
+      });
+    });
+    if (d.esquema && Object.keys(zonasUsadas).length > 0) {
+      const cvE = canvasEsquema(d.esquema, zonasUsadas, 3);
+      const esc = Math.min(120 / cvE.width, 52 / cvE.height);
+      const ew = cvE.width * esc;
+      const eh = cvE.height * esc;
+      asegurar(eh + 14, tituloOrden);
+      texto("Ubicación de los motivos en la prenda", M, y, 9, true, [61, 90, 62]);
+      y += 3;
+      doc.addImage(cvE.toDataURL("image/png"), "PNG", M, y, ew, eh);
+      const lx = M + ew + 6;
+      d.motivos.forEach((m, i) => {
+        const c = aRgb(COLORES_MOTIVO[i % COLORES_MOTIVO.length]);
+        doc.setFillColor(c[0], c[1], c[2]);
+        doc.setDrawColor(90, 87, 80);
+        doc.rect(lx, y + 2 + i * 7, 4.5, 4.5, "FD");
+        const etiqueta = doc.splitTextToSize((i + 1) + ". " + m.nombre, W - M - lx - 7)[0];
+        texto(etiqueta, lx + 6.5, y + 5.5 + i * 7, 9);
+      });
+      y += eh + 2;
+    }
   }
 
   asegurar(34, tituloOrden);
@@ -399,7 +428,6 @@ async function construirPDF(d) {
       y = encabezado("Gráfico: " + m.nombre + (nChunks > 1 ? "  (" + (k + 1) + "/" + nChunks + ")" : ""));
       texto("Fila 1 = la de abajo. Los puntos se numeran de derecha a izquierda. Líneas gruesas cada 5 y 10.", M, y, 8.5, false, GRIS2);
       y += 5;
-      // leyenda de letras
       let lx = M;
       m.hexes.forEach((hx, i) => {
         const etiqueta = (LETRAS[i] || "?") + " = " + m.nombres[i];
@@ -479,7 +507,7 @@ export default function OrdenTrabajo({ p, onClose, app }) {
   const { artesanas, cfg, getPrenda, talles, pedidos, sp, catOf } = app;
   const [motData, setMotData] = useState(null);
   const [errMot, setErrMot] = useState(false);
-  const [vinculos, setVinculos] = useState((p.motivos || []).map(v => ({...v})));
+  const [vinculos, setVinculos] = useState((p.motivos || []).map(v => ({...v, zonas: (v.zonas || []).slice()})));
   const [sucio, setSucio] = useState(false);
   const [mostrarCliente, setMostrarCliente] = useState(false);
   const [pdf, setPdf] = useState(null);
@@ -501,6 +529,7 @@ export default function OrdenTrabajo({ p, onClose, app }) {
   const fila = filaTalle(talles, p.talle, cat);
   const art = artesanas.find(a => a.nombre === p.artesana);
   const tiempo = cfg.tiemposProd[p.prenda] || 14;
+  const esq = esquemaDe(p.prenda, cat);
 
   const preparados = useMemo(() => {
     if (!motData) return [];
@@ -513,7 +542,10 @@ export default function OrdenTrabajo({ p, onClose, app }) {
   const cambiarVinculos = nuevos => { setVinculos(nuevos); setSucio(true); setPdf(null); };
   const agregarVinculo = () => {
     if (!motData || motData.motivos.length === 0) return;
-    cambiarVinculos(vinculos.concat([{motivoId: motData.motivos[0].id, ubicacion: ""}]));
+    cambiarVinculos(vinculos.concat([{motivoId: motData.motivos[0].id, ubicacion: "", zonas: []}]));
+  };
+  const cambiarZonas = (i, nuevasZonas) => {
+    cambiarVinculos(vinculos.map((x, j) => j === i ? {...x, zonas: nuevasZonas, ubicacion: nuevasZonas.length > 0 ? nuevasZonas.join(", ") : x.ubicacion} : x));
   };
   const guardarVinculos = () => {
     const limpios = vinculos.filter(v => v.motivoId);
@@ -528,11 +560,13 @@ export default function OrdenTrabajo({ p, onClose, app }) {
     setMsg("");
     try {
       if (sucio) guardarVinculos();
-      const lista = preparados.filter(Boolean);
+      const lista = preparados
+        .map((m, i) => (m ? {...m, zonas: vinculos[i].zonas || []} : null))
+        .filter(Boolean);
       const doc = await construirPDF({
         pedido: p, hoy: hoy(), fila: fila, tiempo: tiempo, mostrarCliente: mostrarCliente,
         lanaPorPrenda: pr ? pr.lana : 0, lanaTotal: pr ? pr.lana * p.cantidad : 0,
-        taller: cfg.taller, motivos: lista
+        taller: cfg.taller, motivos: lista, esquema: esq
       });
       const blob = doc.output("blob");
       const nombre = "Orden_" + p.id + "_" + slug(p.prenda) + "_" + slug(p.artesana) + ".pdf";
@@ -615,7 +649,7 @@ export default function OrdenTrabajo({ p, onClose, app }) {
               const prep = preparados[i];
               const gTot = prep ? prep.gPedido.reduce((a, g) => a + g, 0) : 0;
               return (
-                <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap",padding:"10px",border:"1px solid " + T.border,borderRadius:4,marginBottom:8,background:T.bgCard}}>
+                <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap",padding:"10px",border:"1px solid " + T.border,borderLeft:"4px solid " + COLORES_MOTIVO[i % COLORES_MOTIVO.length],borderRadius:4,marginBottom:8,background:T.bgCard}}>
                   {m ? <MiniMotivo m={m} paleta={motData.paleta}/> : <div style={{width:72,height:72,border:"1px dashed " + T.danger,borderRadius:2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:T.danger,textAlign:"center",flexShrink:0}}>no existe</div>}
                   <div style={{flex:1,minWidth:200}}>
                     <select value={v.motivoId} onChange={e => cambiarVinculos(vinculos.map((x, j) => j === i ? {...x, motivoId: Number(e.target.value)} : x))} style={{width:"100%",padding:"7px 10px",border:"1px solid " + T.border,borderRadius:2,fontSize:13,fontFamily:"inherit",marginBottom:6,background:T.bgCard}}>
@@ -624,6 +658,7 @@ export default function OrdenTrabajo({ p, onClose, app }) {
                     </select>
                     <input list="ubicaciones-motivo" value={v.ubicacion || ""} onChange={e => cambiarVinculos(vinculos.map((x, j) => j === i ? {...x, ubicacion: e.target.value} : x))} placeholder="Ubicación en la prenda (ej: canesú, puños)" style={{width:"100%",padding:"7px 10px",border:"1px solid " + T.border,borderRadius:2,fontSize:13,fontFamily:"inherit",boxSizing:"border-box"}}/>
                     {prep ? <div style={{fontSize:11,color:T.inkMid,marginTop:6}}>{prep.ancho}×{prep.alto} pts · {prep.hexes.length} colores · repetido {prep.rH}×{prep.rV} · {Math.ceil(gTot)} g de lana para el pedido</div> : null}
+                    <SelectorZonas esq={esq} vinculos={vinculos} indice={i} onChange={nz => cambiarZonas(i, nz)}/>
                   </div>
                   <button onClick={() => cambiarVinculos(vinculos.filter((_, j) => j !== i))} style={{border:"none",background:"none",cursor:"pointer",color:T.danger,fontSize:16}}>✕</button>
                 </div>
@@ -640,7 +675,7 @@ export default function OrdenTrabajo({ p, onClose, app }) {
 
       <Seccion titulo="PDF para la artesana">
         <div style={{fontSize:12,color:T.inkMid,marginBottom:10,lineHeight:1.5}}>
-          Incluye los datos del pedido, medidas del talle, lana, instrucciones{validos > 0 ? ", " + validos + (validos === 1 ? " motivo" : " motivos") + " con colores, gramos, vista previa y gráfico numerado" : ""} y espacio para firmas.
+          Incluye los datos del pedido, medidas del talle, lana, instrucciones{validos > 0 ? ", " + validos + (validos === 1 ? " motivo" : " motivos") + " con colores, gramos, vista previa y gráfico numerado" : ""}, el esquema de la prenda con la ubicación de los motivos y espacio para firmas.
         </div>
         <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.inkMid,marginBottom:12,cursor:"pointer"}}>
           <input type="checkbox" checked={mostrarCliente} onChange={e => { setMostrarCliente(e.target.checked); setPdf(null); }}/>
