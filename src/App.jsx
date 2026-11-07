@@ -598,7 +598,7 @@ function Pedidos() {
             return (
               <div key={p.id} style={{background:venc?T.dangerLt:T.bgCard,border:"1px solid "+(venc?T.danger:T.border),borderRadius:4,padding:"1rem",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                  <div><div style={{fontWeight:500,fontSize:14}}>{p.cliente}</div><div style={{fontSize:12,color:T.inkMid,marginTop:2}}>{p.prenda}{p.talle ? " · " + p.talle : ""} ×{p.cantidad}</div></div>
+                  <div><div style={{fontWeight:500,fontSize:14}}>{p.cliente}</div><div style={{fontSize:12,color:T.inkMid,marginTop:2}}>{p.prenda}{p.talle ? " · " + p.talle : ""} ×{p.cantidad}{p.motivos && p.motivos.length > 0 ? <span title="Tiene motivos asociados" style={{marginLeft:6,padding:"1px 6px",borderRadius:99,background:T.violetLt,color:T.violet,fontSize:10,whiteSpace:"nowrap"}}>🎨 {p.motivos.length}</span> : null}</div></div>
                   <Badge e={p.estado}/>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
@@ -636,7 +636,7 @@ function Pedidos() {
                   return (
                     <tr key={p.id} style={{background:venc?T.dangerLt:(i%2===0?T.bgCard:T.bg)}}>
                       <TD><strong style={{fontWeight:500}}>{p.cliente}</strong></TD>
-                      <TD style={{fontSize:11,color:T.inkMid}}>{p.prenda}</TD>
+                      <TD style={{fontSize:11,color:T.inkMid}}>{p.prenda}{p.motivos && p.motivos.length > 0 ? <span title="Tiene motivos asociados" style={{marginLeft:6,padding:"1px 6px",borderRadius:99,background:T.violetLt,color:T.violet,fontSize:10,whiteSpace:"nowrap"}}>🎨 {p.motivos.length}</span> : null}</TD>
                       <TD><span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:T.bgMuted,color:T.inkMid}}>{p.talle || "—"}</span></TD>
                       <TD>{p.artesana}</TD>
                       <TD>{p.cantidad}</TD>
