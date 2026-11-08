@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, createContext, useContext } from 
 import { dbGet, dbSet, getSession, onAuth, signIn, signOut } from "./supabase.js";
 import Motivos from "./Motivos.jsx";
 import OrdenTrabajo from "./OrdenTrabajo.jsx";
+import { ModalEliminar, ModalEliminados } from "./EliminarPedido.jsx";
 
 // ═══════════════════════ CONSTANTES ═══════════════════════
 const T = {bg:"#faf7f2",bgCard:"#fff",bgMuted:"#f0ebe2",bgDeep:"#e6dfd4",ink:"#1e1c18",inkMid:"#5a5750",inkLt:"#9a9690",border:"#ddd8cf",borderLt:"#eae5dc",green:"#3d5a3e",greenLt:"#e8f0e8",tierra:"#8b6f47",danger:"#b03a2e",dangerLt:"#fdf0ee",warn:"#916a00",warnLt:"#fef8e6",ok:"#2d6a4f",okLt:"#e8f5ee",info:"#2c5f8a",infoLt:"#eaf2f8",violet:"#5b3f7a",violetLt:"#f2eef8"};
@@ -576,7 +577,7 @@ function Pedidos() {
 
   return (
     <div>
-      <SecTitle action={<Btn variant="primary" onClick={() => setNPed(nuevoVacio())}>+ Nuevo pedido</Btn>}>Pedidos</SecTitle>
+      <SecTitle action={<div style={{display:"flex",gap:8,alignItems:"center"}}><Btn onClick={() => setAccion({tipo:"eliminados"})}>🗑 Eliminados</Btn><Btn variant="primary" onClick={() => setNPed(nuevoVacio())}>+ Nuevo pedido</Btn>{accion && accion.tipo === "eliminar" ? <ModalEliminar p={accion.p} app={A} onClose={() => setAccion(null)}/> : null}{accion && accion.tipo === "eliminados" ? <ModalEliminados app={A} onClose={() => setAccion(null)}/> : null}</div>}>Pedidos</SecTitle>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
         {["Todos"].concat(ESTADOS).map(e => <Pill key={e} active={filtEst === e} onClick={() => setFiltEst(e)}>{e}</Pill>)}
       </div>
@@ -610,7 +611,7 @@ function Pedidos() {
                   <select value={p.estado} onChange={e => cambiarEstado(p.id, e.target.value)} style={{padding:"6px 10px",border:"1px solid "+T.border,borderRadius:2,background:ES[p.estado].bg,color:ES[p.estado].tx,fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",flex:1,marginRight:8}}>
                     {ESTADOS.map(e => <option key={e}>{e}</option>)}
                   </select>
-                  <div style={{display:"flex",gap:6}}>
+                  <div style={{display:"flex",gap:6}}><Btn small onClick={() => setAccion({tipo:"eliminar", p:p})}>🗑</Btn>
                     <Btn small onClick={() => setAccion({tipo:"pago", p:p})}>Pago</Btn>
                     <Btn small onClick={() => setAccion({tipo:"orden", p:p})}>Orden</Btn>
                   </div>
@@ -652,7 +653,7 @@ function Pedidos() {
                       <TD>
                         <div style={{display:"flex",gap:4}}>
                           <Btn small onClick={() => setAccion({tipo:"pago", p:p})}>Pago</Btn>
-                          <Btn small onClick={() => setAccion({tipo:"envio", p:p})}>Envío</Btn>
+                          <Btn small onClick={() => setAccion({tipo:"envio", p:p})}>Envío</Btn><Btn small onClick={() => setAccion({tipo:"eliminar", p:p})}>🗑</Btn>
                           <Btn small onClick={() => setAccion({tipo:"orden", p:p})}>Orden</Btn>
                         </div>
                       </TD>
