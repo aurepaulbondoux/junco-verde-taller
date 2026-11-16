@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { dbGet, dbSet } from "./supabase.js";
 import ImportarImagen from "./ImportarImagen.jsx";
+import VistaPrenda from "./VistaPrenda.jsx";
 
 // ═══════════════════════ CONSTANTES Y UTILIDADES ═══════════════════════
 const T = {bg:"#faf7f2",bgCard:"#fff",bgMuted:"#f0ebe2",bgDeep:"#e6dfd4",ink:"#1e1c18",inkMid:"#5a5750",inkLt:"#9a9690",border:"#ddd8cf",borderLt:"#eae5dc",green:"#3d5a3e",greenLt:"#e8f0e8",tierra:"#8b6f47",danger:"#b03a2e",dangerLt:"#fdf0ee",warn:"#916a00",warnLt:"#fef8e6",ok:"#2d6a4f",okLt:"#e8f5ee",info:"#2c5f8a",infoLt:"#eaf2f8",violet:"#5b3f7a",violetLt:"#f2eef8"};
@@ -1223,6 +1224,8 @@ function Editor({ motivo, paleta, lanas, prendas, mob, estado, onGuardar, onVolv
             </div>
             <div style={{fontSize: 10, color: T.inkLt, marginTop: 6}}>Es una simulación estilizada para evaluar colores y composición; el tejido real puede variar según la lana.</div>
           </Tarjeta>
+
+          <VistaPrenda motivoId={motivo.id} gridRef={gridRef} tick={tick} colores={colores} paleta={paleta} ptos10={ptos10} vueltas10={vueltas10} prendaNombre={prenda} repH={calculo.rH} repV={calculo.rV}/>
 
           <Tarjeta titulo="Lana necesaria">
             <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8}}>
