@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { dbGet } from "./supabase.js";
 import { esquemaDe, COLORES_MOTIVO, canvasEsquema, SelectorZonas } from "./EsquemaPrenda.jsx";
+import { renderPrenda } from "./VistaPrenda.jsx";
 
 // ═══════════════════════ CONSTANTES Y UTILIDADES ═══════════════════════
 const T = {bg:"#faf7f2",bgCard:"#fff",bgMuted:"#f0ebe2",bgDeep:"#e6dfd4",ink:"#1e1c18",inkMid:"#5a5750",inkLt:"#9a9690",border:"#ddd8cf",borderLt:"#eae5dc",green:"#3d5a3e",greenLt:"#e8f0e8",danger:"#b03a2e",dangerLt:"#fdf0ee",warn:"#916a00",warnLt:"#fef8e6",ok:"#2d6a4f",okLt:"#e8f5ee",info:"#2c5f8a",infoLt:"#eaf2f8",violet:"#5b3f7a",violetLt:"#f2eef8"};
@@ -411,6 +412,26 @@ async function construirPDF(d) {
       y += 3;
       doc.addImage(cv.toDataURL("image/png"), "PNG", M, y, iw, ih);
       y += ih + 4;
+    }
+
+    // vista del motivo sobre la prenda (si se marcaron zonas)
+    if (d.esquema && m.zonas && m.zonas.length > 0) {
+      const cvP = renderPrenda({
+        esq: d.esquema, k: 3, etiquetas: false, colorBase: m.hexes[0],
+        asignaciones: [{
+          zonas: m.zonas, modo: "bloque",
+          motivo: {grid: m.grid, hexes: m.hexes, ancho: m.ancho, alto: m.alto, pp: m.pp, vv: m.vv, rH: m.rH, rV: m.rV}
+        }]
+      });
+      const escP = Math.min(150 / cvP.width, 62 / cvP.height);
+      const pw = cvP.width * escP;
+      const ph = cvP.height * escP;
+      asegurar(ph + 12, titulo);
+      y += 2;
+      texto("Así se vería el motivo en la prenda (escala aproximada)", M, y, 8, false, GRIS);
+      y += 3;
+      doc.addImage(cvP.toDataURL("image/jpeg", 0.88), "JPEG", M, y, pw, ph);
+      y += ph + 4;
     }
 
     // gráfico, en una o más páginas
