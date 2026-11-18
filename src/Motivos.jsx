@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { dbGet, dbSet } from "./supabase.js";
 import ImportarImagen from "./ImportarImagen.jsx";
 import VistaPrenda from "./VistaPrenda.jsx";
+import Puntos, { TabsModo } from "./Puntos.jsx";
 
 // ═══════════════════════ CONSTANTES Y UTILIDADES ═══════════════════════
 const T = {bg:"#faf7f2",bgCard:"#fff",bgMuted:"#f0ebe2",bgDeep:"#e6dfd4",ink:"#1e1c18",inkMid:"#5a5750",inkLt:"#9a9690",border:"#ddd8cf",borderLt:"#eae5dc",green:"#3d5a3e",greenLt:"#e8f0e8",tierra:"#8b6f47",danger:"#b03a2e",dangerLt:"#fdf0ee",warn:"#916a00",warnLt:"#fef8e6",ok:"#2d6a4f",okLt:"#e8f5ee",info:"#2c5f8a",infoLt:"#eaf2f8",violet:"#5b3f7a",violetLt:"#f2eef8"};
@@ -1280,6 +1281,12 @@ function Editor({ motivo, paleta, lanas, prendas, mob, estado, onGuardar, onVolv
 
 // ═══════════════════════ PANTALLA PRINCIPAL ═══════════════════════
 export default function Motivos({ lanas, prendas, mob }) {
+  const [modo, setModo] = useState("color");
+  if (modo === "puntos") return <Puntos mob={mob} prendas={prendas} onModo={setModo}/>;
+  return <MotivosColor lanas={lanas} prendas={prendas} mob={mob} onModo={setModo}/>;
+}
+
+function MotivosColor({ lanas, prendas, mob, onModo }) {
   const [data, setData] = useState(null);
   const [errorCarga, setErrorCarga] = useState(false);
   const [intento, setIntento] = useState(0);
@@ -1381,6 +1388,7 @@ export default function Motivos({ lanas, prendas, mob }) {
     <div>
       <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 20, paddingBottom: 10, borderBottom: "1px solid " + T.borderLt, gap: 10, flexWrap: "wrap"}}>
         <h2 style={{margin: 0, fontSize: 13, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: T.inkMid}}>Motivos y gráficos</h2>
+        {onModo ? <TabsModo modo="color" onModo={onModo}/> : null}
         <div style={{display: "flex", gap: 8, alignItems: "center"}}>
           <span style={{fontSize: 11, color: estado === "error" ? T.danger : T.inkLt}}>{estado === "saving" ? "☁ Guardando…" : (estado === "error" ? "⚠ Error al guardar" : "")}</span>
           <Boton onClick={() => setVista("paleta")}>🎨 Paleta del taller ({data.paleta.length})</Boton>
